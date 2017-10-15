@@ -32,11 +32,10 @@ import sys
 import pandas as pd
 import pickle as pk
 from tqdm import tqdm_notebook as tqdm
-from copy import deepcopy
-from geopy.distance import vincenty
 from geopy.distance import great_circle
 from scipy.signal import gaussian
 from scipy.ndimage import filters
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 ```
 
 
@@ -87,14 +86,14 @@ def import_gpx_dir(path):
     n = 0
     for filename in tqdm(filenames, total=len(filenames)):
         dt = import_gpx_file(path, filename)
-        dt['id_ride'] = n
+        dt['idride'] = n
         n += 1
         data = data.append(dt, ignore_index=True)
     return data
 
 def interpret_gpx(path, name):
     data = import_gpx_dir(path)
-    data["id_rider"] = name
+    data["idrider"] = name
     data.elevation = data.elevation.astype(int)
     data.timestamp = data.timestamp.astype(int)
     data.idpoint = data.idpoint.astype(int)
@@ -136,6 +135,11 @@ data2 = interpret_gpx("/Users/esse/activ/marcos_paulo", 1)
     
 
 
+
+
+    
+
+
 # Import saved gpx data from selected pickle files
 
 
@@ -145,47 +149,15 @@ data2 = load_gpx("1.pkl")
 data = data1.append(data2, ignore_index=True)
 print(data.shape)
 print(data.head())
-print(data.tail())
-print(data.dtypes)
 ```
 
-    (1739684, 9)
-       elevation  idpoint  idride idrider   latitude  longitude   timestamp  \
-    0        747        0       0         -23.562747 -46.691410  1496509570   
-    1        749        1       0         -23.562589 -46.691241  1496509607   
-    2        750        2       0         -23.562554 -46.691224  1496509609   
-    3        750        3       0         -23.562522 -46.691213  1496509610   
-    4        750        4       0         -23.562473 -46.691212  1496509611   
-    
-       id_ride  id_rider  
-    0        0         0  
-    1        0         0  
-    2        0         0  
-    3        0         0  
-    4        0         0  
-             elevation  idpoint  idride idrider   latitude  longitude   timestamp  \
-    1739679        734     1062       0         -23.594736 -46.685689  1445522108   
-    1739680        734     1063       0         -23.594747 -46.685661  1445522116   
-    1739681        734     1064       0         -23.594735 -46.685623  1445522119   
-    1739682        734     1065       0         -23.594728 -46.685581  1445522121   
-    1739683        733     1066       0         -23.594741 -46.685539  1445522123   
-    
-             id_ride  id_rider  
-    1739679      637         1  
-    1739680      637         1  
-    1739681      637         1  
-    1739682      637         1  
-    1739683      637         1  
-    elevation      int64
-    idpoint        int64
-    idride         int64
-    idrider       object
-    latitude     float64
-    longitude    float64
-    timestamp      int64
-    id_ride        int64
-    id_rider       int64
-    dtype: object
+    (1739684, 7)
+       elevation  idpoint  idride  idrider   latitude  longitude   timestamp
+    0        747        0       0        0 -23.562747 -46.691410  1496509570
+    1        749        1       0        0 -23.562589 -46.691241  1496509607
+    2        750        2       0        0 -23.562554 -46.691224  1496509609
+    3        750        3       0        0 -23.562522 -46.691213  1496509610
+    4        750        4       0        0 -23.562473 -46.691212  1496509611
 
 
 # Simple plot points by elevation
@@ -199,9 +171,10 @@ seg = seg[seg.latitude < -23.50] #west boundary
 seg = seg[seg.longitude > -46.76] #north boundary
 seg = seg[seg.longitude < -46.60] #south boundary
 
-plt.figure(figsize=(20,20))
+plt.figure(figsize=(14,14))
 z = seg.elevation / max(seg.elevation) * 255
-plt.scatter(seg.longitude, seg.latitude, 1, c=z[:,], alpha=0.01)
+cm = plt.cm.get_cmap('bwr')
+plt.scatter(seg.longitude, seg.latitude, 1, c=z[:,], cmap=cm, alpha=0.01)
 plt.axis('equal')
 plt.show()
 # plt.savefig('elevations600.png', dpi=600, transparent=True)
@@ -278,15 +251,15 @@ Let's print one ride to see it.
 
 
 ```python
-seg = data[data.id_rider==0]
-seg = seg[seg.id_ride==12]
+seg = data[data.idrider==0]
+seg = seg[seg.idride==12]
 seg = seg[1:1100]
 ```
 
 
 ```python
 # this will print the sum of seconds. A greater than 2000
-plt.figure(figsize=(20,2))
+plt.figure(figsize=(20,4))
 plt.scatter(seg.timestamp, seg.deltatime, color="blue", label="Points Delta Time")
 plt.scatter(seg.timestamp, seg.distance, color="red", label="Points Distance")
 plt.scatter(seg.timestamp, seg.speed, color="lime", label="Measured Speed")
@@ -306,26 +279,43 @@ Here we can see some signal failures: Every time the red graph shows up with too
 
 There is patterns on theses failures? Let's see.
 
-# Speed
+# Viewing the Speed
 
 
 ```python
-col = np.zeros((len(seg.speed),3))
-col[:,0] = np.clip(seg.speed/8.8, 0, 1) / 360 * 90
-col[:,1] = 1
-col[:,2] = np.clip(seg.speed/8.8, 0, 1)
+seg = data[data.idrider==0]
+seg = seg[seg.idride<100]
+# seg = seg[0:1000]
 
-plt.figure(figsize=(20,20))
-plt.scatter(seg.longitude, seg.latitude, c=colors.hsv_to_rgb(col), alpha=0.5)
+seg['glat'] = np.around(seg.latitude, 3)
+seg['glon'] = np.around(seg.longitude, 3)
+meanspeed = pd.DataFrame(seg.groupby(['glat', 'glon'], axis=0)['speed'].mean())
+seg = seg.merge(meanspeed, left_on=['glat', 'glon'], right_index=True, suffixes=('', 'mean'))
+
+print("{: 8.2f} {}".format(sum(seg.distance)/1000, "km"))
+print("{: 8.2f} {}".format(sum(seg.deltatime)/60/60, "hrs"))
+print("{: 8.2f} {}".format(np.mean(seg.speed*3.6), "km/h"))
+
+plt.figure(figsize=(20, 20))
+cm = plt.cm.get_cmap('viridis')
+speed = np.clip(seg.speedmean, 0, 10)
+# print(speed.describe())
+# plt.scatter(seg.glon, seg.glat, 0.1, c=seg.speedmean, cmap=cm)
+plt.scatter(seg.longitude, seg.latitude, 0.1, c=speed, cmap=cm)
 plt.axis('equal')
 plt.show()
-
-# plt.savefig('elevations600.png', dpi=600, transparent=True)
-# plt.savefig('elevations600.eps', dpi=600, transparent=True)
-
-
 ```
 
+     3031.95 km
+      177.94 hrs
+       22.89 km/h
 
-![png](output_22_0.png)
 
+
+![png](output_22_1.png)
+
+
+
+```python
+
+```
