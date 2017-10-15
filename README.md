@@ -75,10 +75,10 @@ def import_gpx_file(path, filename):
         'latitude': data[:,0],
         'longitude': data[:,1],
         'elevation': data[:,2],
-        'time': data[:,3],
-        'id_point': data[:,4],
-        'id_ride': 0,
-        'id_rider': ""
+        'timestamp': data[:,3],
+        'idpoint': data[:,4],
+        'idride': 0,
+        'idrider': ""
     })
 
 def import_gpx_dir(path):
@@ -89,12 +89,15 @@ def import_gpx_dir(path):
         dt = import_gpx_file(path, filename)
         dt['id_ride'] = n
         n += 1
-        data = data.append(dt)
+        data = data.append(dt, ignore_index=True)
     return data
 
 def interpret_gpx(path, name):
     data = import_gpx_dir(path)
     data["id_rider"] = name
+    data.elevation = data.elevation.astype(int)
+    data.timestamp = data.timestamp.astype(int)
+    data.idpoint = data.idpoint.astype(int)
     #save to cache
     cache = open(str(name)+'.pkl', 'wb')
     pk.dump(data, cache)
@@ -133,26 +136,56 @@ data2 = interpret_gpx("/Users/esse/activ/marcos_paulo", 1)
     
 
 
-
-
-    
-
-
 # Import saved gpx data from selected pickle files
 
 
 ```python
 data1 = load_gpx("0.pkl")
 data2 = load_gpx("1.pkl")
-data = data1.append(data2)
+data = data1.append(data2, ignore_index=True)
 print(data.shape)
-print(data.columns)
+print(data.head())
+print(data.tail())
+print(data.dtypes)
 ```
 
-    (1739684, 7)
-    Index(['elevation', 'id_point', 'id_ride', 'id_rider', 'latitude', 'longitude',
-           'time'],
-          dtype='object')
+    (1739684, 9)
+       elevation  idpoint  idride idrider   latitude  longitude   timestamp  \
+    0        747        0       0         -23.562747 -46.691410  1496509570   
+    1        749        1       0         -23.562589 -46.691241  1496509607   
+    2        750        2       0         -23.562554 -46.691224  1496509609   
+    3        750        3       0         -23.562522 -46.691213  1496509610   
+    4        750        4       0         -23.562473 -46.691212  1496509611   
+    
+       id_ride  id_rider  
+    0        0         0  
+    1        0         0  
+    2        0         0  
+    3        0         0  
+    4        0         0  
+             elevation  idpoint  idride idrider   latitude  longitude   timestamp  \
+    1739679        734     1062       0         -23.594736 -46.685689  1445522108   
+    1739680        734     1063       0         -23.594747 -46.685661  1445522116   
+    1739681        734     1064       0         -23.594735 -46.685623  1445522119   
+    1739682        734     1065       0         -23.594728 -46.685581  1445522121   
+    1739683        733     1066       0         -23.594741 -46.685539  1445522123   
+    
+             id_ride  id_rider  
+    1739679      637         1  
+    1739680      637         1  
+    1739681      637         1  
+    1739682      637         1  
+    1739683      637         1  
+    elevation      int64
+    idpoint        int64
+    idride         int64
+    idrider       object
+    latitude     float64
+    longitude    float64
+    timestamp      int64
+    id_ride        int64
+    id_rider       int64
+    dtype: object
 
 
 # Simple plot points by elevation
@@ -166,7 +199,7 @@ seg = seg[seg.latitude < -23.50] #west boundary
 seg = seg[seg.longitude > -46.76] #north boundary
 seg = seg[seg.longitude < -46.60] #south boundary
 
-plt.figure(figsize=(10,10))
+plt.figure(figsize=(20,20))
 z = seg.elevation / max(seg.elevation) * 255
 plt.scatter(seg.longitude, seg.latitude, 1, c=z[:,], alpha=0.01)
 plt.axis('equal')
@@ -208,121 +241,25 @@ The idea to detect signal failure is really simple: if it's a real stop, with pa
 
 ```python
 # create a column with time deltas
-data['delta_time'] = np.ediff1d(data.time, to_begin=0.)
+data['deltatime'] = np.ediff1d(data.timestamp, to_begin=0.)
+data.loc[data.idpoint==0, 'deltatime'] = 0
+```
 
+
+```python
 # create a column with meters deltas
 gis = np.matrix([np.roll(data.latitude, 1, 0), data.latitude, np.roll(data.longitude, 1, 0), data.longitude])
 geo = pd.DataFrame(gis.T, columns=['lat1', 'lat2', 'lon1', 'lon2'])
 data['distance'] = geo.apply(lambda x: great_circle((x.lat1, x.lon1), (x.lat2, x.lon2)).meters, axis = 1)
 del(gis, geo)
-data.loc[data.id_point==0, 'delta_time'] = 0
-data.loc[data.id_point==0, 'distance'] = 0
-data.head()
+data.loc[data.idpoint==0, 'distance'] = 0
 ```
 
 
-
-
-<div>
-<style>
-    .dataframe thead tr:only-child th {
-        text-align: right;
-    }
-
-    .dataframe thead th {
-        text-align: left;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-</style>
-<table border="1" class="dataframe">
-  <thead>
-    <tr style="text-align: right;">
-      <th></th>
-      <th>elevation</th>
-      <th>id_point</th>
-      <th>id_ride</th>
-      <th>id_rider</th>
-      <th>latitude</th>
-      <th>longitude</th>
-      <th>time</th>
-      <th>delta_time</th>
-      <th>distance</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <th>0</th>
-      <td>747.7</td>
-      <td>0.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>-23.562747</td>
-      <td>-46.691410</td>
-      <td>1.496510e+09</td>
-      <td>0.0</td>
-      <td>0.000000</td>
-    </tr>
-    <tr>
-      <th>1</th>
-      <td>749.9</td>
-      <td>1.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>-23.562589</td>
-      <td>-46.691241</td>
-      <td>1.496510e+09</td>
-      <td>37.0</td>
-      <td>24.611158</td>
-    </tr>
-    <tr>
-      <th>2</th>
-      <td>750.0</td>
-      <td>2.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>-23.562554</td>
-      <td>-46.691224</td>
-      <td>1.496510e+09</td>
-      <td>2.0</td>
-      <td>4.261312</td>
-    </tr>
-    <tr>
-      <th>3</th>
-      <td>750.1</td>
-      <td>3.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>-23.562522</td>
-      <td>-46.691213</td>
-      <td>1.496510e+09</td>
-      <td>1.0</td>
-      <td>3.731743</td>
-    </tr>
-    <tr>
-      <th>4</th>
-      <td>750.2</td>
-      <td>4.0</td>
-      <td>0</td>
-      <td>0</td>
-      <td>-23.562473</td>
-      <td>-46.691212</td>
-      <td>1.496510e+09</td>
-      <td>1.0</td>
-      <td>5.451040</td>
-    </tr>
-  </tbody>
-</table>
-</div>
-
-
-
-
 ```python
-data['speed'] = data.distance / data.delta_time
-data.loc[data.id_point==0, 'speed'] = 0
+# create a column with speed
+data['speed'] = data.distance / data.deltatime
+data.loc[data.idpoint==0, 'speed'] = 0
 ```
 
 Make a checkpoint of the data.
@@ -350,9 +287,9 @@ seg = seg[1:1100]
 ```python
 # this will print the sum of seconds. A greater than 2000
 plt.figure(figsize=(20,2))
-plt.scatter(seg.time, seg.delta_time, color="blue", label="Points Delta Time")
-plt.scatter(seg.time, seg.distance, color="red", linewidth=1, label="Points Distance")
-plt.scatter(seg.time, seg.speed, color="lime", linewidth=1, label="Measured Speed")
+plt.scatter(seg.timestamp, seg.deltatime, color="blue", label="Points Delta Time")
+plt.scatter(seg.timestamp, seg.distance, color="red", label="Points Distance")
+plt.scatter(seg.timestamp, seg.speed, color="lime", label="Measured Speed")
 
 # gaussian smooth of speed
 axes = plt.gca()
@@ -362,7 +299,7 @@ plt.show()
 ```
 
 
-![png](output_18_0.png)
+![png](output_19_0.png)
 
 
 Here we can see some signal failures: Every time the red graph shows up with too much diverging, there were lag. At slow speeds, it's normal to happen data diverging. But we can se the stops too, they are the green spikes. So, in general, in this small sample, small green spikes relate to signal failure, with greater distances between readings.
@@ -378,10 +315,11 @@ col[:,0] = np.clip(seg.speed/8.8, 0, 1) / 360 * 90
 col[:,1] = 1
 col[:,2] = np.clip(seg.speed/8.8, 0, 1)
 
-plt.figure(figsize=(10,10))
-plt.scatter(seg.longitude, seg.latitude, 4, c=colors.hsv_to_rgb(col), alpha=1)
+plt.figure(figsize=(20,20))
+plt.scatter(seg.longitude, seg.latitude, c=colors.hsv_to_rgb(col), alpha=0.5)
 plt.axis('equal')
 plt.show()
+
 # plt.savefig('elevations600.png', dpi=600, transparent=True)
 # plt.savefig('elevations600.eps', dpi=600, transparent=True)
 
@@ -389,10 +327,5 @@ plt.show()
 ```
 
 
-![png](output_21_0.png)
+![png](output_22_0.png)
 
-
-
-```python
-
-```
