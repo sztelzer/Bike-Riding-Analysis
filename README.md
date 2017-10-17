@@ -36,6 +36,7 @@ from geopy.distance import great_circle
 from scipy.signal import gaussian
 from scipy.ndimage import filters
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import nvector as nv
 ```
 
 
@@ -140,7 +141,7 @@ data2 = interpret_gpx("/Users/esse/activ/marcos_paulo", 1)
     
 
 
-# Import saved gpx data from selected pickle files
+# Load gpx data from selected pickle files
 
 
 ```python
@@ -173,7 +174,7 @@ seg = seg[seg.longitude < -46.60] #south boundary
 
 plt.figure(figsize=(14,14))
 z = seg.elevation / max(seg.elevation) * 255
-cm = plt.cm.get_cmap('bwr')
+cm = plt.cm.get_cmap('magma')
 plt.scatter(seg.longitude, seg.latitude, 1, c=z[:,], cmap=cm, alpha=0.01)
 plt.axis('equal')
 plt.show()
@@ -204,7 +205,8 @@ After infering more properties from the relationship of a smal account of variab
 
 Finally, we can use this dataset as a Predictive one for use in machine learning algorithms. For a selected rider, we will try to predict it behavior on a certain point of some path.
 
-# Looking into the data
+# Extending the data
+
 The collected sample points are timely defined, but the precision is low, at a maximum of one second period. There are times that GPS pauses when the rider stops or simply can't tell the localization. To understand the difference between those two cases, we'll plot both delta time between points, distance, and the calculated speed.
 
 The time is in seconds, the distance is in meters, and the speed is simply meters per second. Later will transform and use other, more common units.
@@ -215,23 +217,51 @@ The idea to detect signal failure is really simple: if it's a real stop, with pa
 ```python
 # create a column with time deltas
 data['deltatime'] = np.ediff1d(data.timestamp, to_begin=0.)
-data.loc[data.idpoint==0, 'deltatime'] = 0
+```
+
+
+```python
+# create a column with the last points, so to not use loopings anymore
+data['llat'] = np.roll(data.latitude, 1, 0)
+data['llon'] = np.roll(data.longitude, 1, 0)
+data.loc[data.idpoint==0, 'llat'] = data.loc[data.idpoint==0, 'latitude']
+data.loc[data.idpoint==0, 'llon'] = data.loc[data.idpoint==0, 'longitude']
 ```
 
 
 ```python
 # create a column with meters deltas
-gis = np.matrix([np.roll(data.latitude, 1, 0), data.latitude, np.roll(data.longitude, 1, 0), data.longitude])
-geo = pd.DataFrame(gis.T, columns=['lat1', 'lat2', 'lon1', 'lon2'])
-data['distance'] = geo.apply(lambda x: great_circle((x.lat1, x.lon1), (x.lat2, x.lon2)).meters, axis = 1)
-del(gis, geo)
-data.loc[data.idpoint==0, 'distance'] = 0
+# very fast vectorized solution
+def haversine(lon1, lat1, lon2, lat2):
+    lon1, lat1, lon2, lat2 = map(np.radians, [lon1, lat1, lon2, lat2])
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = np.sin(dlat/2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2.0)**2
+    c = 2 * np.arcsin(np.sqrt(a))
+    meters = 6372800 * c
+    return meters
+
+data['distance'] = haversine(data.llon, data.llat, data.longitude, data.latitude)
+
+```
+
+
+```python
+# create a column with angle in degrees
+data['heading'] = np.arctan2(geo.lon2-geo.lon1, geo.lat2-geo.lat1) * 180 / np.pi
 ```
 
 
 ```python
 # create a column with speed
 data['speed'] = data.distance / data.deltatime
+```
+
+
+```python
+data.loc[data.idpoint==0, 'deltatime'] = 0
+data.loc[data.idpoint==0, 'distance'] = 0
+data.loc[data.idpoint==0, 'heading'] = 0
 data.loc[data.idpoint==0, 'speed'] = 0
 ```
 
@@ -254,10 +284,7 @@ Let's print one ride to see it.
 seg = data[data.idrider==0]
 seg = seg[seg.idride==12]
 seg = seg[1:1100]
-```
 
-
-```python
 # this will print the sum of seconds. A greater than 2000
 plt.figure(figsize=(20,4))
 plt.scatter(seg.timestamp, seg.deltatime, color="blue", label="Points Delta Time")
@@ -272,7 +299,7 @@ plt.show()
 ```
 
 
-![png](output_19_0.png)
+![png](output_21_0.png)
 
 
 Here we can see some signal failures: Every time the red graph shows up with too much diverging, there were lag. At slow speeds, it's normal to happen data diverging. But we can se the stops too, they are the green spikes. So, in general, in this small sample, small green spikes relate to signal failure, with greater distances between readings.
@@ -283,36 +310,43 @@ There is patterns on theses failures? Let's see.
 
 
 ```python
-seg = data[data.idrider==0]
-seg = seg[seg.idride<100]
-# seg = seg[0:1000]
+seg = data
+seg = seg[seg.latitude > -23.63] #east boundary
+seg = seg[seg.latitude < -23.50] #west boundary
+seg = seg[seg.longitude > -46.76] #north boundary
+seg = seg[seg.longitude < -46.60] #south boundary
 
 seg['glat'] = np.around(seg.latitude, 3)
 seg['glon'] = np.around(seg.longitude, 3)
-meanspeed = pd.DataFrame(seg.groupby(['glat', 'glon'], axis=0)['speed'].mean())
-seg = seg.merge(meanspeed, left_on=['glat', 'glon'], right_index=True, suffixes=('', 'mean'))
+seg['gdir'] = round(seg.heading/45)*45
+
+meanspeed = pd.DataFrame(seg.groupby(['glat', 'glon', 'gdir'], axis=0)['speed'].mean())
+seg = seg.merge(meanspeed, left_on=['glat', 'glon', 'gdir'], right_index=True, suffixes=('', 'mean'))
 
 print("{: 8.2f} {}".format(sum(seg.distance)/1000, "km"))
 print("{: 8.2f} {}".format(sum(seg.deltatime)/60/60, "hrs"))
-print("{: 8.2f} {}".format(np.mean(seg.speed*3.6), "km/h"))
+print("{: 8.2f} {}".format(np.mean(seg[seg.speed < 20].speed)*3.6, "km/h"))
 
-plt.figure(figsize=(20, 20))
-cm = plt.cm.get_cmap('viridis')
+plt.figure(figsize=(10, 10))
+cm = plt.cm.get_cmap('winter')
 speed = np.clip(seg.speedmean, 0, 10)
-# print(speed.describe())
-# plt.scatter(seg.glon, seg.glat, 0.1, c=seg.speedmean, cmap=cm)
-plt.scatter(seg.longitude, seg.latitude, 0.1, c=speed, cmap=cm)
+plt.scatter(seg.longitude, seg.latitude, 0.01, alpha=1, c=speed, cmap=cm)
 plt.axis('equal')
 plt.show()
+
+# plt.savefig('elevations600.png', dpi=300, transparent=False)
+# plt.savefig('elevations600.eps', dpi=600, transparent=True)
+
+
 ```
 
-     3031.95 km
-      177.94 hrs
-       22.89 km/h
+     9608.33 km
+     1011.19 hrs
+       18.28 km/h
 
 
 
-![png](output_22_1.png)
+![png](output_24_1.png)
 
 
 
