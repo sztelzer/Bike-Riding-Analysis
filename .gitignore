@@ -1,3 +1,4 @@
 *.pkl
 .DS_Store
 .ipynb_checkpoints/Bike rides GPS data analysis-checkpoint.ipynb
+*.csv
