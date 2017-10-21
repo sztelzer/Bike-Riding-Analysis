@@ -2,3 +2,4 @@
 .DS_Store
 .ipynb_checkpoints/Bike rides GPS data analysis-checkpoint.ipynb
 *.csv
+.ipynb_checkpoints/OpenGL plot-checkpoint.ipynb
