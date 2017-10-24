@@ -110,7 +110,45 @@ plt.show()
 ![png](output_4_1.png)
 
 
+# Scaling to visible vectors
+
+Group all data in one region/direction to a single vector.
+1. Sum N sequential points to one vector.
+2. Average the vectors in the same field region with the same direction.
+
 
 ```python
+def reduce(ride, N=10):
+    breaks = np.arange(N-1, len(ride), N)
+    vectors_list = np.split(ride, breaks)
+    vector_list = list(map(np.mean, vectors_list))
+    return pd.DataFrame(vector_list)
+```
+
+
+```python
+a = data.loc[0].loc[0]
+b = condensate(a, 60)
+```
+
+
+```python
+g, ax = plt.subplots(figsize=(10,10))
+u = b.flon-b.ilon
+v = b.flat-b.ilat
+s = 0.001
+x = b.ilon + (np.cos(np.arctan2(u, v)) * s)
+y = b.ilat + (-np.sin(np.arctan2(u, v)) * s)
+plt.quiver(x, y, u, v, color=cmap(norm(b.dist)), scale=0.002, pivot='mid')
+plt.scatter(a.ilon, a.ilat, s=0.1, color="black", alpha=0.1)
+ax.autoscale_view()
+ax.axis('equal')
+plt.axis('off')
+plt.show()
+
 
 ```
+
+
+![png](output_9_0.png)
+
