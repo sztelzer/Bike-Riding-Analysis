@@ -11,6 +11,47 @@ from sklearn.preprocessing import MinMaxScaler
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 from matplotlib.collections import LineCollection
+
+def save_data(data, name):
+    cache = open(name+".pkl", 'wb')
+    pk.dump(data, cache)
+    cache.close()
+    
+def load_data(name):
+    cache = open(name+".pkl", 'rb')
+    data = pk.load(cache)
+    cache.close()
+    return data
+```
+
+### Reduction functions
+
+
+```python
+def reducetime(data, N=10):
+    data = data.groupby(['rider', 'ride']).apply(timereducer, N)
+    return data
+    
+def timereducer(ride, N):
+    breaks = np.arange(N-1, len(ride), N)
+    groups = np.split(ride, breaks)
+    vectors = list(map(np.mean, groups))
+    return pd.DataFrame(vectors)
+
+def reducespace(rides, R):
+    rides['glon'] = np.around(rides.ilon, R)
+    rides['glat'] = np.around(rides.ilat, R)
+    rides['gdir'] = (rides.heading/90).astype(np.int)*90
+    vectors = rides.groupby(['gdir', 'glon', 'glat']).mean()
+    return vectors
+
+def haversine(lon1, lat1, lon2, lat2):
+    lon1, lat1, lon2, lat2 = map(np.radians, [lon1, lat1, lon2, lat2])
+    a = np.sin((lat2-lat1)/2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin((lon2-lon1)/2.0)**2
+    return 6372800 * 2 * np.arcsin(np.sqrt(a))
+
+def clearvectors(vecs):
+    return vecs
 ```
 
 
@@ -18,32 +59,47 @@ from matplotlib.collections import LineCollection
 cachefile = open("grouped.pkl", 'rb')
 data = pk.load(cachefile)
 cachefile.close()
-print(data.head())
+
+data = data[data.ilat > -23.63] #east boundary
+data = data[data.ilat < -23.50] #west boundary
+data = data[data.ilon > -46.76] #north boundary
+data = data[data.ilon < -46.60] #south boundary
 ```
 
-                     point  ride  rider       ilon       ilat       ielev  \
-    rider ride                                                              
-    0     0    0  0.000000   0.0    0.0 -46.691410 -23.562747  747.000000   
-               1  0.027027   0.0    0.0 -46.691405 -23.562743  747.054054   
-               2  0.054054   0.0    0.0 -46.691401 -23.562738  747.108108   
-               3  0.081081   0.0    0.0 -46.691396 -23.562734  747.162162   
-               4  0.108108   0.0    0.0 -46.691392 -23.562730  747.216216   
-    
-                         itime       flon       flat       felev         ftime  \
-    rider ride                                                                   
-    0     0    0  1.496510e+09 -46.691405 -23.562743  747.054054  1.496510e+09   
-               1  1.496510e+09 -46.691401 -23.562738  747.108108  1.496510e+09   
-               2  1.496510e+09 -46.691396 -23.562734  747.162162  1.496510e+09   
-               3  1.496510e+09 -46.691392 -23.562730  747.216216  1.496510e+09   
-               4  1.496510e+09 -46.691387 -23.562726  747.270270  1.496510e+09   
-    
-                      dist    heading         ddist     delev     climb  
-    rider ride                                                           
-    0     0    0  0.665167  46.926654  6.651668e-01  0.054054  0.081264  
-               1  0.665167  46.926654  1.014265e-08  0.054054  0.081264  
-               2  0.665167  46.926654  1.105071e-08  0.054054  0.081264  
-               3  0.665167  46.926654  1.034407e-08  0.054054  0.081264  
-               4  0.665167  46.926655  1.084928e-08  0.054054  0.081264  
+
+```python
+minidata = data.loc[0].loc[1]
+print(minidata.shape)
+
+microdata = reducetime(minidata)
+print(microdata.shape)
+
+nanodata = reducespace(microdata, 4)
+print(nanodata.shape)
+
+plt.figure(figsize=(30,10))
+plt.subplot(131).quiver(minidata.ilon, minidata.ilat, minidata.flon-minidata.ilon, minidata.flat-minidata.ilat, color=rgba, units='xy', angles='xy', scale=1, pivot='tail')
+plt.axis('equal')
+plt.axis('off')
+plt.subplot(132).quiver(microdata.ilon, microdata.ilat, microdata.flon-microdata.ilon, microdata.flat-microdata.ilat, color=rgba, units='xy', angles='xy', scale=1, pivot='tail')
+plt.axis('equal')
+plt.axis('off')
+plt.subplot(133).quiver(nanodata.ilon, nanodata.ilat, nanodata.flon-nanodata.ilon, nanodata.flat-nanodata.ilat, color=rgba, units='xy', angles='xy', scale=1, pivot='tail')
+plt.axis('equal')
+plt.axis('off')
+
+
+plt.show()
+
+```
+
+    (11533, 16)
+    (1154, 16)
+    (561, 16)
+
+
+
+![png](output_5_1.png)
 
 
 # Quiver, Scatter and Line Collection.
@@ -54,7 +110,7 @@ Line Collection are the best, but a little more complicated.
 
 ```python
 n = 200
-c = data.loc[0].loc[ride].head(n)
+c = data.loc[0].loc[0].head(n)
 c = c.append(data.loc[0].loc[0].tail(n))
 c = c.append(data.loc[0].loc[1].head(n//2))
 c = c.append(data.loc[0].loc[1].tail(n))
@@ -75,42 +131,40 @@ plt.subplot(222).scatter(c.ilon, c.ilat, color=rgba, s=0.2)
 plt.axis('equal')
 plt.axis('off')
 plt.show()
+```
 
-c = data.loc[0].loc[0]
 
-# create columns with rounded features
+![png](output_7_0.png)
+
+
+
+```python
 N = 20
-c['ilonmean'] = np.convolve(c.ilon, np.ones((N,))/N, mode='same')
-c['ilatmean'] = np.convolve(c.ilat, np.ones((N,))/N, mode='same')
 c['distmean'] = np.convolve(c.dist, np.ones((N,))/N, mode='same')
-c['dirmean'] = round(c.heading/45)*45
 
+c = data
+groups = c[['ilon', 'ilat']].groupby([c.rider, c.ride], as_index=False, squeeze=True)
+xy = list(groups)
+x = []
+for a in range(len(xy)):
+    x.append(np.array(xy[a][1]))
 
-xy = np.array((c.ilon, c.ilat)).T #Nx2
-xy = xy.reshape(-1, 1, 2)
-segments = np.hstack([xy[:-1], xy[1:]])
-g, ax = plt.subplots(figsize=(40,40))
-collection = LineCollection(segments, cmap='jet', linewidth=8)
-collection.set_array(norm(c.distmean))
+g, ax = plt.subplots(figsize=(60,60))
+collection = LineCollection(x, colors=rgba, linewidth=1, alpha=1)
+# collection.set_array(norm(c.distmean))
 
 ax.add_collection(collection)
 ax.autoscale_view()
 ax.axis('equal')
 plt.axis('off')
 plt.show()
-
-
 ```
 
 
-![png](output_4_0.png)
+![png](output_8_0.png)
 
 
-
-![png](output_4_1.png)
-
-
-# Scaling to visible vectors
+# Scaling to directions vectors
 
 Group all data in one region/direction to a single vector.
 1. Sum N sequential points to one vector.
@@ -118,29 +172,33 @@ Group all data in one region/direction to a single vector.
 
 
 ```python
-def reduce(ride, N=10):
-    breaks = np.arange(N-1, len(ride), N)
-    vectors_list = np.split(ride, breaks)
-    vector_list = list(map(np.mean, vectors_list))
-    return pd.DataFrame(vector_list)
+s = data
+print(s.shape)
+s = reduceTime(s, 100)
+print(s.shape)
+s = reduceSpace(s)
+print(s.shape)
+s = clearVectors(s)
+print(s.shape)
 ```
+
+    (3519833, 16)
+    (35199, 16)
+    (285, 16)
+    (285, 16)
+
 
 
 ```python
-a = data.loc[0].loc[0]
-b = condensate(a, 60)
-```
-
-
-```python
-g, ax = plt.subplots(figsize=(10,10))
-u = b.flon-b.ilon
-v = b.flat-b.ilat
-s = 0.001
-x = b.ilon + (np.cos(np.arctan2(u, v)) * s)
-y = b.ilat + (-np.sin(np.arctan2(u, v)) * s)
-plt.quiver(x, y, u, v, color=cmap(norm(b.dist)), scale=0.002, pivot='mid')
-plt.scatter(a.ilon, a.ilat, s=0.1, color="black", alpha=0.1)
+s['distmean'] = np.convolve(s.dist, np.ones((N,))/N, mode='same')
+g, ax = plt.subplots(figsize=(20,20))
+u = (s.flon-s.ilon)/s.dist
+v = (s.flat-s.ilat)/s.dist
+mov = 0.00025
+x = s.ilon + (np.cos(np.arctan2(u, v)) * mov)
+y = s.ilat + (-np.sin(np.arctan2(u, v)) * mov)
+plt.quiver(x, y, u, v, color=cmap(norm(s.distmean)), scale=0.001, pivot='mid')
+plt.scatter(s.ilon, s.ilat, s=1, color="black", alpha=1)
 ax.autoscale_view()
 ax.axis('equal')
 plt.axis('off')
@@ -150,5 +208,12 @@ plt.show()
 ```
 
 
-![png](output_9_0.png)
+![png](output_12_0.png)
 
+
+# Lines Subcolors...
+
+
+```python
+
+```
