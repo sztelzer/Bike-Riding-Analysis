@@ -35,9 +35,20 @@ def reducetime(data, N=10):
 def timereducer(ride, N):
     breaks = np.arange(N-1, len(ride), N)
     groups = np.split(ride, breaks)
-    vectors = list(map(np.mean, groups))
-    return pd.DataFrame(vectors)
+    vectors = pd.concat(list(map(firsttolast, groups)))
+    return vectors
 
+def firsttolast(ride):
+    vector = ride.head(1)
+    tail = vector.tail(1)
+    vector.flon = tail.flon
+    vector.flat = tail.flat
+    vector.felev = tail.felev
+    vector.ftime = tail.ftime
+    vector.dist = haversine(vector.ilon, vector.ilat, vector.flon, vector.flat)
+    vector.heading = np.arctan2(vector.flon-vector.ilon, vector.flat-vector.ilat) * 180 / np.pi
+    return vector
+    
 def reducespace(rides, R):
     rides['glon'] = np.around(rides.ilon, R)
     rides['glat'] = np.around(rides.ilat, R)
@@ -74,8 +85,8 @@ print(minidata.shape)
 microdata = reducetime(minidata)
 print(microdata.shape)
 
-nanodata = reducespace(microdata, 4)
-print(nanodata.shape)
+# nanodata = reducespace(microdata, 4)
+# print(nanodata.shape)
 
 plt.figure(figsize=(30,10))
 plt.subplot(131).quiver(minidata.ilon, minidata.ilat, minidata.flon-minidata.ilon, minidata.flat-minidata.ilat, color=rgba, units='xy', angles='xy', scale=1, pivot='tail')
@@ -84,9 +95,9 @@ plt.axis('off')
 plt.subplot(132).quiver(microdata.ilon, microdata.ilat, microdata.flon-microdata.ilon, microdata.flat-microdata.ilat, color=rgba, units='xy', angles='xy', scale=1, pivot='tail')
 plt.axis('equal')
 plt.axis('off')
-plt.subplot(133).quiver(nanodata.ilon, nanodata.ilat, nanodata.flon-nanodata.ilon, nanodata.flat-nanodata.ilat, color=rgba, units='xy', angles='xy', scale=1, pivot='tail')
-plt.axis('equal')
-plt.axis('off')
+# plt.subplot(133).quiver(nanodata.ilon, nanodata.ilat, nanodata.flon-nanodata.ilon, nanodata.flat-nanodata.ilat, color=rgba, units='xy', angles='xy', scale=1, pivot='tail')
+# plt.axis('equal')
+# plt.axis('off')
 
 
 plt.show()
@@ -95,7 +106,6 @@ plt.show()
 
     (11533, 16)
     (1154, 16)
-    (561, 16)
 
 
 
@@ -143,15 +153,18 @@ N = 20
 c['distmean'] = np.convolve(c.dist, np.ones((N,))/N, mode='same')
 
 c = data
-groups = c[['ilon', 'ilat']].groupby([c.rider, c.ride], as_index=False, squeeze=True)
-xy = list(groups)
-x = []
-for a in range(len(xy)):
-    x.append(np.array(xy[a][1]))
+# groups = c[['ilon', 'ilat']].groupby([c.rider, c.ride], as_index=False, squeeze=True)
+# xy = list(groups)
+# x = []
+# for a in range(len(xy)):
+#     x.append(np.array(xy[a][1]))
+
+x = list(zip(zip(c.ilon, c.ilat), zip(c.flon, c.flat)))
+print(len(x))
 
 g, ax = plt.subplots(figsize=(60,60))
-collection = LineCollection(x, colors=rgba, linewidth=1, alpha=1)
-# collection.set_array(norm(c.distmean))
+collection = LineCollection(x, linewidth=1, alpha=0.5)
+collection.set_array(norm(c.distmean))
 
 ax.add_collection(collection)
 ax.autoscale_view()
@@ -160,8 +173,11 @@ plt.axis('off')
 plt.show()
 ```
 
+    3519833
 
-![png](output_8_0.png)
+
+
+![png](output_8_1.png)
 
 
 # Scaling to directions vectors
@@ -210,8 +226,6 @@ plt.show()
 
 ![png](output_12_0.png)
 
-
-# Lines Subcolors...
 
 
 ```python
