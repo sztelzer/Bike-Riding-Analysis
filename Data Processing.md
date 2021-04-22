@@ -1,6 +1,6 @@
 
 # Raw data importing
-Our primary goal here is to import, interpolate, and extend our bike riding GPS data. It'll be somewhat complicated as it is not small task on code, but using vectorization on all processes will keep execution really fast. We have for this task about 1.7M datapoints. Each datapoint corresponds to a fancy **one point in space time**, i.e. one point made of 4 dimensions of timestamp, latitude, longitude and elevation. We hope that connection each one sequentially on time will render a path that a biker rode. To guarantee bookeeping and post processing capabilities, we will record the point id, ride id and rider id.
+Our primary goal here is to import, interpolate, and extend our bike riding GPS data. It'll be somewhat complicated as it is not small task on code, but using vectorization on all processes will keep execution really fast. We have for this task about 1.7M datapoints. Each datapoint corresponds to a fancy **one point in space time**, i.e. one point made of 4 dimensions of timestamp, latitude, longitude and elevation. We hope that connecting each one sequentially on time will render a path that a biker rode. To guarantee book keeping and post processing capabilities, we will record the point id, ride id and rider id.
 
 
 ```python
@@ -125,7 +125,7 @@ print(imported.shape)
 There will have some steps to have a gooda data shaped to most processes. The idea is to cleanup dirt distances introduced by bad GPS and interpolate the points as to make all rows 1 meter of distance, that will simplify most phisical calculations.
 
 ####  Create destination columns
-This will transform the list in a origin/destination list of points, so the resulting list is [M-1, N*2]. These new columns are equal to the next row. Finally remove the last element of each ride that has value zero.
+This will transform the list in a origin/destination list of points, so the resulting list is [M-1, N\*2]. These new columns are equal to the next row. Finally remove the last element of each ride that has value zero.
 
 
 ```python
